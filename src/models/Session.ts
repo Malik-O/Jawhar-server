@@ -11,6 +11,13 @@ export interface QuranVerse {
   transcriptText: string;
 }
 
+export interface SpeakerSegment {
+  speaker: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
 export interface ISession extends Document {
   originalFileName: string;
   fileType: 'audio' | 'video';
@@ -21,7 +28,8 @@ export interface ISession extends Document {
   title: string;
   transcript: string;
   rawTranscript: string;
-  words: { word: string; start: number; end: number }[];
+  words: { word: string; start: number; end: number; speaker: string }[];
+  speakerSegments: SpeakerSegment[];
   duration: number;
   summary: string;
   keyPoints: string[];
@@ -41,7 +49,13 @@ const sessionSchema = new Schema<ISession>(
     title: { type: String, default: '' },
     transcript: { type: String, default: '' },
     rawTranscript: { type: String, default: '' },
-    words: [{ word: String, start: Number, end: Number }],
+    words: [{ word: String, start: Number, end: Number, speaker: String }],
+    speakerSegments: [{
+      speaker: String,
+      start: Number,
+      end: Number,
+      text: String,
+    }],
     duration: { type: Number, default: 0 },
     summary: { type: String, default: '' },
     keyPoints: { type: [String], default: [] },

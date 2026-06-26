@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk';
 import { envConfig } from '../config/env';
+import type { WhisperXSegment } from './whisperxClient';
 
 const groq = new Groq({ apiKey: envConfig.groqApiKey });
 
@@ -181,6 +182,76 @@ export async function fixTranscript(transcript: string): Promise<string> {
       if (!text) throw new Error(`Model ${model} returned empty content`);
 
       console.log(`Transcript formatting complete using ${model}`);
+      return ensureSpacing(text);
+
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+
+      if (isRateLimitError(error)) {
+        console.warn(`Rate limit on ${model}, trying next model...`);
+        errors.push(`${model}: rate limited`);
+        continue;
+      }
+
+      if (msg.includes('context') || msg.includes('tokens') || msg.includes('model_not_found')) {
+        console.warn(`Model ${model} failed (${msg.slice(0, 80)}), trying next...`);
+        errors.push(`${model}: ${msg.slice(0, 80)}`);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error(`فشل تصحيح النص: تم استنفاد جميع النماذج المتاحة.\nتفاصيل: ${errors.join(' | ')}`);
+}
+
+const FIX_WITH_SPEAKERS_SYSTEM_PROMPT = `أنت خبير في التدقيق اللغوي وتنسيق النصوص الدينية والعلمية باللغة العربية.
+تتلقى نصاً مفرغاً آلياً من ملف صوتي (Transcript) مقسّم حسب المتحدثين. مهمتك:
+1. إصلاح الكلمات الخاطئة إملائياً أو سياقياً. ضع أي كلمة مصححة داخل وسم: <fix original="الكلمة الأصلية">الكلمة الصحيحة</fix>
+2. تحديد الآيات القرآنية: <quran surah="رقم السورة" ayah="رقم الآية">الآية</quran>
+3. تحديد الأحاديث النبوية: <hadith>نص الحديث</hadith>
+4. إضافة علامات الترقيم المناسبة.
+5. إضافة فواصل فقرات (سطر جديد واحد \\n) عند تغيير الموضوع.
+6. استخدام النقاط (- ) عند تعداد نقاط.
+تنبيهات هامة:
+- حافظ على النص الأصلي ولا تعيد صياغة الجمل.
+- حافظ على وسوم المتحدثين [SPEAKER_XX] كما هي تماماً في بداية كل قسم. لا تحذفها ولا تعدلها.
+- تأكد من وجود مسافات بين جميع الكلمات.
+أعد النص المنسق بالكامل مع وسوم المتحدثين دون أي تعليقات إضافية.`;
+
+/**
+ * Fixes transcript with speaker diarization markers.
+ * Sends segments with [SPEAKER_XX] markers to LLM, preserves markers in output.
+ * Returns formatted transcript with speaker tags embedded.
+ */
+export async function fixTranscriptWithSpeakers(segments: WhisperXSegment[]): Promise<string> {
+  // Build input text with speaker markers
+  const inputText = segments
+    .map(s => `[${s.speaker}] ${s.text}`)
+    .join('\n');
+
+  const userPrompt = `قم بتدقيق وتنسيق النص التالي مع الحفاظ على وسوم المتحدثين:\n\n${inputText}`;
+  const errors: string[] = [];
+
+  for (const model of FREE_MODELS) {
+    try {
+      console.log(`Fixing transcript (with speakers) using Groq model: ${model}`);
+
+      const completion = await groq.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: FIX_WITH_SPEAKERS_SYSTEM_PROMPT },
+          { role: 'user',   content: userPrompt },
+        ],
+        temperature:  0.2,
+        max_tokens:   8192,
+      });
+
+      const text = completion.choices[0]?.message?.content;
+      if (!text) throw new Error(`Model ${model} returned empty content`);
+
+      console.log(`Transcript formatting (with speakers) complete using ${model}`);
       return ensureSpacing(text);
 
     } catch (error) {

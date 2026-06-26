@@ -5,6 +5,7 @@ import { envConfig } from './config/env';
 import { connectDatabase } from './config/database';
 import { uploadRoutes } from './routes/upload';
 import { ensureUploadDir } from './services/fileManager';
+import { initSocketServer } from './services/socketManager';
 
 async function bootstrap(): Promise<void> {
   const app = Fastify({
@@ -36,6 +37,11 @@ async function bootstrap(): Promise<void> {
     await connectDatabase();
     await app.listen({ port: envConfig.port, host: '0.0.0.0' });
     console.log(`🚀 Server running on http://localhost:${envConfig.port}`);
+
+    // Initialize Socket.IO on the Fastify HTTP server
+    const httpServer = app.server;
+    initSocketServer(httpServer);
+    console.log(`🔌 Socket.IO server initialized`);
   } catch (error) {
     app.log.error(error);
     process.exit(1);
