@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export type SessionStatus = 'uploaded' | 'extracted' | 'transcribed' | 'enriched' | 'summarized' | 'failed';
 
@@ -35,6 +35,8 @@ export interface ISession extends Document {
   keyPoints: string[];
   quranVerses: QuranVerse[];
   archived: boolean;
+  sheikhId: string;
+  lectureId: Types.ObjectId | null;
   createdAt: Date;
 }
 
@@ -68,6 +70,8 @@ const sessionSchema = new Schema<ISession>(
       transcriptText: String,
     }],
     archived: { type: Boolean, default: false },
+    sheikhId: { type: String, default: '', index: true },
+    lectureId: { type: Schema.Types.ObjectId, ref: 'Lecture', default: null },
   },
   {
     timestamps: true,

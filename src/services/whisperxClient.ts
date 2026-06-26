@@ -6,6 +6,8 @@
 
 import { envConfig } from '../config/env';
 import { transcribeWithGroq, TranscribeResult } from './groqTranscriber';
+import fs from 'fs';
+import FormData from 'form-data';
 
 export interface WhisperXWord {
   word: string;
@@ -53,10 +55,14 @@ async function transcribeWithWhisperX(audioPath: string): Promise<WhisperXResult
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const res = await fetch(`${SERVICE_URL}/transcribe`, {
+    // Try the upload endpoint first (for cloud deployment like HF Spaces)
+    const form = new FormData();
+    form.append('audio_file', fs.createReadStream(audioPath));
+    form.append('language', 'ar');
+
+    const res = await fetch(`${SERVICE_URL}/transcribe-upload`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audio_path: audioPath, language: 'ar' }),
+      body: form as any,
       signal: controller.signal,
     });
 

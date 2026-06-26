@@ -9,6 +9,8 @@ interface EnvConfig {
   port: number;
   uploadDir: string;
   whisperxServiceUrl: string;
+  clerkSecretKey: string;
+  clerkSuperAdminId: string;
 }
 
 function loadEnvConfig(): EnvConfig {
@@ -23,6 +25,8 @@ function loadEnvConfig(): EnvConfig {
     port: parseInt(process.env.PORT || '4000', 10),
     uploadDir: path.resolve(__dirname, '../../uploads'),
     whisperxServiceUrl: process.env.WHISPERX_SERVICE_URL || 'http://127.0.0.1:5001',
+    clerkSecretKey: process.env.CLERK_SECRET_KEY || '',
+    clerkSuperAdminId: process.env.CLERK_SUPER_ADMIN_ID || '',
   };
 }
 
