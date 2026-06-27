@@ -6,7 +6,7 @@ import { requireAuth } from '../middleware/clerkAuth';
 export async function progressRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get<{ Params: { courseId: string } }>(
     '/api/progress/course/:courseId',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       const userId = await requireAuth(request, reply);
       if (!userId) return;
       const course = await Course.findById(request.params.courseId).lean();

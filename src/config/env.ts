@@ -23,7 +23,7 @@ function loadEnvConfig(): EnvConfig {
     groqApiKey,
     mongodbUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/lecture-tool',
     port: parseInt(process.env.PORT || '4000', 10),
-    uploadDir: path.resolve(__dirname, '../../uploads'),
+    uploadDir: process.env.VERCEL ? '/tmp/uploads' : path.resolve(__dirname, '../../uploads'),
     whisperxServiceUrl: process.env.WHISPERX_SERVICE_URL || 'http://127.0.0.1:5001',
     clerkSecretKey: process.env.CLERK_SECRET_KEY || '',
     clerkSuperAdminId: process.env.CLERK_SUPER_ADMIN_ID || '',

@@ -28,7 +28,7 @@ export interface ISession extends Document {
   title: string;
   transcript: string;
   rawTranscript: string;
-  words: { word: string; start: number; end: number; speaker: string }[];
+  words: { word: string; start: number; end: number; speaker?: string }[];
   speakerSegments: SpeakerSegment[];
   duration: number;
   summary: string;
@@ -37,6 +37,7 @@ export interface ISession extends Document {
   archived: boolean;
   sheikhId: string;
   lectureId: Types.ObjectId | null;
+  publicKey: string;
   createdAt: Date;
 }
 
@@ -72,10 +73,21 @@ const sessionSchema = new Schema<ISession>(
     archived: { type: Boolean, default: false },
     sheikhId: { type: String, default: '', index: true },
     lectureId: { type: Schema.Types.ObjectId, ref: 'Lecture', default: null },
+    publicKey: { type: String, unique: true, sparse: true, index: true },
   },
   {
     timestamps: true,
   }
 );
+
+import { customAlphabet } from 'nanoid';
+const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 6);
+
+sessionSchema.pre('save', function (next) {
+  if (this.isNew && !this.publicKey) {
+    this.publicKey = nanoid();
+  }
+  next();
+});
 
 export const Session = mongoose.model<ISession>('Session', sessionSchema);

@@ -48,6 +48,12 @@ export async function courseRoutes(fastify: FastifyInstance): Promise<void> {
     return reply.send(course);
   });
 
+  fastify.get<{ Params: { key: string } }>('/api/courses/public/:key', async (request, reply) => {
+    const course = await Course.findOne({ publicKey: request.params.key }).populate('lectures', 'title order description publicKey').lean();
+    if (!course) return reply.status(404).send({ error: 'الدورة غير موجودة' });
+    return reply.send(course);
+  });
+
   fastify.patch<{ Params: { id: string } }>('/api/courses/:id', async (request, reply) => {
     if (!await requireSheikh(request, reply)) return;
     const body = request.body as { title?: string; description?: string; coverImage?: string; category?: string };

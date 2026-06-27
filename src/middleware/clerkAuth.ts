@@ -10,28 +10,30 @@ export async function requireAuth(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<string | null> {
+  let token = '';
   const authHeader = request.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
+  
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if ((request.query as any)?.token) {
+    token = (request.query as any).token as string;
+  }
+
+  if (!token) {
     reply.status(401).send({ error: 'غير مصرح — يجب تسجيل الدخول' });
     return null;
   }
-
-  const token = authHeader.substring(7);
   try {
     const payload = await verifyToken(token, {
       secretKey: envConfig.clerkSecretKey,
-      issuer: '',
-      audience: '',
-      authorizedParties: [],
-      clockSkewInSeconds: 5,
-      clockSkewInMs: 5000,
     });
     if (!payload.sub) {
       reply.status(401).send({ error: 'رمز غير صالح' });
       return null;
     }
     return payload.sub;
-  } catch {
+  } catch (error) {
+    console.error('Clerk verifyToken error:', error);
     reply.status(401).send({ error: 'فشل التحقق من الهوية' });
     return null;
   }

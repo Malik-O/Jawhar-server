@@ -1,7 +1,7 @@
 import { Session } from '../models/Session';
 import { extractAudio, getAudioDuration } from './audioExtractor';
-import { transcribeWithDiarization } from './whisperxClient';
-import { summarizeWithGroq, fixTranscript, fixTranscriptWithSpeakers } from './geminiProcessor';
+import { transcribeWithGroq } from './groqTranscriber';
+import { summarizeWithGroq, fixTranscript } from './geminiProcessor';
 import { enrichQuranTags } from './quranService';
 import { emitProgress, emitError } from './socketManager';
 
@@ -88,22 +88,15 @@ export async function runPipeline(sessionId: string): Promise<void> {
     if (session.status === 'extracted' || (session.status === 'failed' && failedAt === 'transcribe')) {
       emitProgress(sessionId, 'transcribing', { progress: 25, status: 'transcribing' });
       try {
-        const { text: rawTranscript, words, speakerSegments, usedDiarization } = await transcribeWithDiarization(session.audioPath, sessionId);
+        const { text: rawTranscript, words } = await transcribeWithGroq(session.audioPath, sessionId);
         session.rawTranscript = rawTranscript;
         session.words = words;
-        session.speakerSegments = speakerSegments.map(s => ({
-          speaker: s.speaker,
-          start: s.start,
-          end: s.end,
-          text: s.text,
-        }));
+        session.speakerSegments = []; // Groq doesn't return speaker segments currently
 
         if (isCancelled(sessionId)) { emitProgress(sessionId, 'cancelled', { progress: 0, status: 'cancelled' }); return; }
 
         emitProgress(sessionId, 'fixing', { progress: 70, status: 'fixing' });
-        const formattedTranscript = usedDiarization
-          ? await fixTranscriptWithSpeakers(speakerSegments)
-          : await fixTranscript(rawTranscript);
+        const formattedTranscript = await fixTranscript(rawTranscript);
         session.transcript = formattedTranscript;
         session.status = 'transcribed';
         session.failedAt = '';

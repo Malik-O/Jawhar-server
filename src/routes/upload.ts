@@ -4,19 +4,84 @@ import fs from 'fs';
 import path from 'path';
 import { getTempFilePath, getFileCategory } from '../services/fileManager';
 import { extractAudio, getAudioDuration } from '../services/audioExtractor';
-import { transcribeWithDiarization } from '../services/whisperxClient';
-import { summarizeWithGroq, fixTranscript, fixTranscriptWithSpeakers } from '../services/geminiProcessor';
+import { transcribeWithGroq } from '../services/groqTranscriber';
+import { summarizeWithGroq, fixTranscript } from '../services/geminiProcessor';
 import { enrichQuranTags } from '../services/quranService';
 import { Session } from '../models/Session';
 import { emitProgress, emitError } from '../services/socketManager';
 import { runPipeline, cancelProcessing, isProcessing } from '../services/processingManager';
+import { requireAuthHook, AuthenticatedRequest } from '../middleware/clerkAuth';
 
 export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
+  // ──────────────────────────────────────────────
+  // Audio streaming for playback (Public/Unprotected for wavesurfer/audio tags)
+  // ──────────────────────────────────────────────
+  fastify.get<{ Params: { id: string } }>(
+    '/api/sessions/:id/audio',
+    async (request, reply) => {
+      const session = await Session.findById(request.params.id);
+      if (!session || !session.audioPath) {
+        return reply.status(404).send({ error: 'ملف الصوت غير موجود' });
+      }
+
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
+      }
+
+      if (!fs.existsSync(session.audioPath)) {
+        return reply.status(404).send({ error: 'ملف الصوت تم حذفه' });
+      }
+
+      const stat = fs.statSync(session.audioPath);
+      const ext = path.extname(session.audioPath).toLowerCase();
+      const mimeMap: Record<string, string> = {
+        '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+        '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac',
+      };
+
+      reply.header('Content-Type', mimeMap[ext] || 'audio/mpeg');
+      reply.header('Content-Length', stat.size);
+      reply.header('Accept-Ranges', 'bytes');
+
+      return reply.send(fs.createReadStream(session.audioPath));
+    }
+  );
+
+  fastify.get<{ Params: { key: string } }>(
+    '/api/sessions/public/:key/audio',
+    async (request, reply) => {
+      const session = await Session.findOne({ publicKey: request.params.key });
+      if (!session || !session.audioPath) {
+        return reply.status(404).send({ error: 'ملف الصوت غير موجود' });
+      }
+
+      if (!fs.existsSync(session.audioPath)) {
+        return reply.status(404).send({ error: 'ملف الصوت تم حذفه' });
+      }
+
+      const stat = fs.statSync(session.audioPath);
+      const ext = path.extname(session.audioPath).toLowerCase();
+      const mimeMap: Record<string, string> = {
+        '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+        '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac',
+      };
+
+      reply.header('Content-Type', mimeMap[ext] || 'audio/mpeg');
+      reply.header('Content-Length', stat.size);
+      reply.header('Accept-Ranges', 'bytes');
+
+      return reply.send(fs.createReadStream(session.audioPath));
+    }
+  );
+
+  fastify.addHook('preHandler', requireAuthHook);
+
+
 
   // ──────────────────────────────────────────────
   // Step 1: Upload file and create session
   // ──────────────────────────────────────────────
-  fastify.post('/api/sessions/start', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/api/sessions/start', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     const file = await request.file();
     if (!file) {
       return reply.status(400).send({ error: 'لم يتم رفع ملف' });
@@ -36,6 +101,7 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         status: 'uploaded',
         tempFilePath: tempInputPath,
         audioPath: fileCategory === 'audio' ? tempInputPath : '',
+        sheikhId: request.userId,
       });
 
       const sessionId = String(session._id);
@@ -63,6 +129,10 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
       const session = await Session.findById(request.params.id);
       if (!session) {
         return reply.status(404).send({ error: 'الجلسة غير موجودة' });
+      }
+
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
       }
 
       const sessionId = String(session._id);
@@ -134,6 +204,10 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: 'الجلسة غير موجودة' });
       }
 
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
+      }
+
       const sessionId = String(session._id);
       try {
         emitProgress(sessionId, 'extracting', { progress: 15, status: 'extracting' });
@@ -188,6 +262,10 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: 'الجلسة غير موجودة' });
       }
 
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
+      }
+
       if (!session.audioPath) {
         return reply.status(400).send({ error: 'يجب استخراج الصوت أولاً' });
       }
@@ -196,21 +274,14 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
       try {
         emitProgress(sessionId, 'transcribing', { progress: 25, status: 'transcribing' });
 
-        const { text: rawTranscript, words, speakerSegments, usedDiarization } = await transcribeWithDiarization(session.audioPath, sessionId);
+        const { text: rawTranscript, words } = await transcribeWithGroq(session.audioPath, sessionId);
         session.rawTranscript = rawTranscript;
         session.words = words;
-        session.speakerSegments = speakerSegments.map(s => ({
-          speaker: s.speaker,
-          start: s.start,
-          end: s.end,
-          text: s.text,
-        }));
+        session.speakerSegments = []; // Groq doesn't return speaker segments currently
 
         emitProgress(sessionId, 'fixing', { progress: 70, status: 'fixing' });
         console.log('📝 Fixing transcript and formatting with LLM...');
-        const formattedTranscript = usedDiarization
-          ? await fixTranscriptWithSpeakers(speakerSegments)
-          : await fixTranscript(rawTranscript);
+        const formattedTranscript = await fixTranscript(rawTranscript);
         session.transcript = formattedTranscript;
 
         session.status = 'transcribed';
@@ -238,6 +309,10 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
       const session = await Session.findById(request.params.id);
       if (!session) {
         return reply.status(404).send({ error: 'الجلسة غير موجودة' });
+      }
+
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
       }
 
       if (!session.transcript) {
@@ -284,6 +359,10 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: 'الجلسة غير موجودة' });
       }
 
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
+      }
+
       if (!session.transcript) {
         return reply.status(400).send({ error: 'يجب تفريغ النص أولاً' });
       }
@@ -316,11 +395,16 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
   // ──────────────────────────────────────────────
   fastify.get<{ Querystring: { archived?: string } }>(
     '/api/sessions',
-    async (request, reply) => {
-      const showArchived = request.query.archived === 'true';
-      const filter = showArchived ? { archived: true } : { archived: { $ne: true } };
+    async (request: AuthenticatedRequest, reply) => {
+      const showArchived = (request.query as any).archived === 'true';
+      const filter: any = { sheikhId: request.userId };
+      if (showArchived) {
+        filter.archived = true;
+      } else {
+        filter.archived = { $ne: true };
+      }
       const sessions = await Session.find(filter)
-        .select('title originalFileName fileType status failedAt duration archived createdAt')
+        .select('title originalFileName fileType status failedAt duration archived createdAt lectureId publicKey')
         .sort({ createdAt: -1 })
         .limit(50)
         .lean();
@@ -362,6 +446,10 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: 'الجلسة غير موجودة' });
       }
 
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
+      }
+
       const body = request.body as { archived?: boolean };
       session.archived = !!body.archived;
       await session.save();
@@ -381,6 +469,10 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: 'الجلسة غير موجودة' });
       }
 
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
+      }
+
       const body = request.body as { title?: string; summary?: string };
       if (typeof body.title === 'string') session.title = body.title;
       if (typeof body.summary === 'string') session.summary = body.summary;
@@ -390,35 +482,7 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
     }
   );
 
-  // ──────────────────────────────────────────────
-  // Audio streaming for playback
-  // ──────────────────────────────────────────────
-  fastify.get<{ Params: { id: string } }>(
-    '/api/sessions/:id/audio',
-    async (request, reply) => {
-      const session = await Session.findById(request.params.id);
-      if (!session || !session.audioPath) {
-        return reply.status(404).send({ error: 'ملف الصوت غير موجود' });
-      }
-
-      if (!fs.existsSync(session.audioPath)) {
-        return reply.status(404).send({ error: 'ملف الصوت تم حذفه' });
-      }
-
-      const stat = fs.statSync(session.audioPath);
-      const ext = path.extname(session.audioPath).toLowerCase();
-      const mimeMap: Record<string, string> = {
-        '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
-        '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac',
-      };
-
-      reply.header('Content-Type', mimeMap[ext] || 'audio/mpeg');
-      reply.header('Content-Length', stat.size);
-      reply.header('Accept-Ranges', 'bytes');
-
-      return reply.send(fs.createReadStream(session.audioPath));
-    }
-  );
+  // Audio streaming moved to top
 
   // ──────────────────────────────────────────────
   // Update transcript (user edits)
@@ -431,6 +495,10 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: 'الجلسة غير موجودة' });
       }
 
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
+      }
+
       const body = request.body as { transcript?: string };
       if (!body?.transcript) {
         return reply.status(400).send({ error: 'النص مطلوب' });
@@ -439,6 +507,48 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
       session.transcript = body.transcript;
       await session.save();
       return reply.send({ status: 'updated' });
+    }
+  );
+
+  // ──────────────────────────────────────────────
+  // Public Access by Key
+  // ──────────────────────────────────────────────
+  fastify.get<{ Params: { key: string } }>(
+    '/api/sessions/public/:key',
+    async (request, reply) => {
+      const session = await Session.findOne({ publicKey: request.params.key })
+        .select('title summary keyPoints transcript quranVerses duration publicKey').lean();
+      if (!session) {
+        return reply.status(404).send({ error: 'الجلسة غير موجودة' });
+      }
+      return reply.send(session);
+    }
+  );
+
+  // ──────────────────────────────────────────────
+  // Sidebar Data (Courses, Standalone Lectures, Sessions)
+  // ──────────────────────────────────────────────
+  fastify.get(
+    '/api/sidebar-data',
+    async (request: AuthenticatedRequest, reply) => {
+      const { Course } = await import('../models/Course');
+      const { Lecture } = await import('../models/Lecture');
+      
+      const courses = await Course.find({ sheikhId: request.userId })
+        .populate({ path: 'lectures', select: 'title order description sessionId publicKey createdAt', options: { sort: { order: 1 } } })
+        .sort({ createdAt: -1 })
+        .lean();
+      
+      const standaloneLectures = await Lecture.find({ sheikhId: request.userId, courseId: null })
+        .sort({ createdAt: -1 })
+        .lean();
+      
+      const unlinkedSessions = await Session.find({ sheikhId: request.userId, lectureId: null, archived: { $ne: true } })
+        .select('title originalFileName fileType status failedAt duration archived createdAt publicKey')
+        .sort({ createdAt: -1 })
+        .lean();
+      
+      return reply.send({ courses, standaloneLectures, unlinkedSessions });
     }
   );
 }

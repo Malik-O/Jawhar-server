@@ -46,6 +46,14 @@ export async function lectureRoutes(fastify: FastifyInstance): Promise<void> {
     return reply.send({ ...lecture, session });
   });
 
+  fastify.get<{ Params: { key: string } }>('/api/lectures/public/:key', async (request, reply) => {
+    const lecture = await Lecture.findOne({ publicKey: request.params.key }).lean();
+    if (!lecture) return reply.status(404).send({ error: 'المحاضرة غير موجودة' });
+    const session = await Session.findById(lecture.sessionId)
+      .select('title summary keyPoints transcript quranVerses duration').lean();
+    return reply.send({ ...lecture, session });
+  });
+
   fastify.patch<{ Params: { id: string } }>('/api/lectures/:id', async (request, reply) => {
     if (!await requireSheikh(request, reply)) return;
     const body = request.body as { title?: string; description?: string; order?: number };
