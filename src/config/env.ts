@@ -11,6 +11,7 @@ interface EnvConfig {
   whisperxServiceUrl: string;
   clerkSecretKey: string;
   clerkSuperAdminId: string;
+  frontendUrl: string[];
 }
 
 function loadEnvConfig(): EnvConfig {
@@ -18,6 +19,9 @@ function loadEnvConfig(): EnvConfig {
   if (!groqApiKey) {
     throw new Error('GROQ_API_KEY is required. Get a free key at https://console.groq.com');
   }
+
+  const frontendUrlString = process.env.FRONTEND_URL || 'http://localhost:3000,http://localhost:4000';
+  const frontendUrl = frontendUrlString.split(',').map(url => url.trim());
 
   return {
     groqApiKey,
@@ -27,6 +31,7 @@ function loadEnvConfig(): EnvConfig {
     whisperxServiceUrl: process.env.WHISPERX_SERVICE_URL || 'http://127.0.0.1:5001',
     clerkSecretKey: process.env.CLERK_SECRET_KEY || '',
     clerkSuperAdminId: process.env.CLERK_SUPER_ADMIN_ID || '',
+    frontendUrl,
   };
 }
 

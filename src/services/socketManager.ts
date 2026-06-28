@@ -1,13 +1,15 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
 
+import { envConfig } from '../config/env';
+
 let io: SocketIOServer | null = null;
 
 /** Initialize Socket.IO server attached to the given HTTP server */
 export function initSocketServer(httpServer: HttpServer): SocketIOServer {
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: ['http://localhost:3000', 'http://localhost:4000'],
+      origin: envConfig.frontendUrl,
       methods: ['GET', 'POST'],
     },
   });

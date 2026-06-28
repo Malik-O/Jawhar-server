@@ -12,7 +12,7 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
       const clerkUser = await clerkClient.users.getUser(userId);
       const email = clerkUser.emailAddresses[0]?.emailAddress || '';
       const name = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || 'مستخدم';
-      const user = await syncUser(userId, email, name);
+      const user = await syncUser(userId, email, name, clerkUser.unsafeMetadata);
       return reply.send(user);
     } catch (error) {
       return reply.status(500).send({ error: 'فشل مزامنة المستخدم' });

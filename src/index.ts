@@ -21,7 +21,7 @@ async function bootstrap(): Promise<void> {
 
   // Plugins
   await app.register(cors, {
-    origin: ['http://localhost:3000', 'http://localhost:4000'],
+    origin: envConfig.frontendUrl,
     methods: ['GET', 'POST', 'DELETE', 'PATCH'],
   });
 

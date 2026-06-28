@@ -7,10 +7,10 @@ export async function getUserByClerkId(clerkId: string) {
   return User.findOne({ clerkId });
 }
 
-export async function syncUser(clerkId: string, email: string, name: string) {
+export async function syncUser(clerkId: string, email: string, name: string, metadata?: any) {
   const isSuperAdmin = clerkId === envConfig.clerkSuperAdminId;
   const role = isSuperAdmin ? 'super_admin' : 'student';
-  const sheikhStatus = isSuperAdmin ? 'approved' : 'none';
+  const sheikhStatus = isSuperAdmin ? 'approved' : (metadata?.role === 'sheikh' ? 'pending' : 'none');
 
   return User.findOneAndUpdate(
     { clerkId },
