@@ -26,6 +26,7 @@ export async function requireAuth(
   try {
     const payload = await verifyToken(token, {
       secretKey: envConfig.clerkSecretKey,
+      issuer: envConfig.clerkIssuer,
     });
     if (!payload.sub) {
       reply.status(401).send({ error: 'رمز غير صالح' });

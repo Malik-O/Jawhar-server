@@ -10,6 +10,7 @@ interface EnvConfig {
   uploadDir: string;
   whisperxServiceUrl: string;
   clerkSecretKey: string;
+  clerkIssuer: string;
   clerkSuperAdminId: string;
   frontendUrl: string[];
 }
@@ -30,6 +31,7 @@ function loadEnvConfig(): EnvConfig {
     uploadDir: process.env.VERCEL ? '/tmp/uploads' : path.resolve(__dirname, '../../uploads'),
     whisperxServiceUrl: process.env.WHISPERX_SERVICE_URL || 'http://127.0.0.1:5001',
     clerkSecretKey: process.env.CLERK_SECRET_KEY || '',
+    clerkIssuer: process.env.CLERK_ISSUER || '',
     clerkSuperAdminId: process.env.CLERK_SUPER_ADMIN_ID || '',
     frontendUrl,
   };
