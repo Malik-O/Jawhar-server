@@ -44,8 +44,8 @@ export async function requireAuthHook(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  // Skip authentication for public routes
-  if (request.url.includes('/public/')) {
+  // Skip authentication for public routes and audio streaming
+  if (request.url.includes('/public/') || request.url.endsWith('/audio')) {
     return;
   }
   

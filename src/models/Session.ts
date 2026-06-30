@@ -38,6 +38,7 @@ export interface ISession extends Document {
   sheikhId: string;
   lectureId: Types.ObjectId | null;
   publicKey: string;
+  visibility: 'public' | 'private' | 'unlisted';
   createdAt: Date;
 }
 
@@ -74,6 +75,7 @@ const sessionSchema = new Schema<ISession>(
     sheikhId: { type: String, default: '', index: true },
     lectureId: { type: Schema.Types.ObjectId, ref: 'Lecture', default: null },
     publicKey: { type: String, unique: true, sparse: true, index: true },
+    visibility: { type: String, enum: ['public', 'private', 'unlisted'], default: 'private' },
   },
   {
     timestamps: true,

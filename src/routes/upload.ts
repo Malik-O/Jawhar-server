@@ -24,9 +24,7 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: 'ملف الصوت غير موجود' });
       }
 
-      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
-        return reply.status(403).send({ error: 'غير مصرح' });
-      }
+
 
       if (!fs.existsSync(session.audioPath)) {
         return reply.status(404).send({ error: 'ملف الصوت تم حذفه' });
@@ -404,7 +402,7 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         filter.archived = { $ne: true };
       }
       const sessions = await Session.find(filter)
-        .select('title originalFileName fileType status failedAt duration archived createdAt lectureId publicKey')
+        .select('title originalFileName fileType status failedAt duration archived createdAt lectureId publicKey visibility')
         .sort({ createdAt: -1 })
         .limit(50)
         .lean();
@@ -482,6 +480,31 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
     }
   );
 
+  // ──────────────────────────────────────────────
+  // Update session visibility
+  // ──────────────────────────────────────────────
+  fastify.patch<{ Params: { id: string }; Body: { visibility: 'public' | 'private' | 'unlisted' } }>(
+    '/api/sessions/:id/visibility',
+    async (request, reply) => {
+      const session = await Session.findById(request.params.id);
+      if (!session) {
+        return reply.status(404).send({ error: 'الجلسة غير موجودة' });
+      }
+
+      if (session.sheikhId !== (request as AuthenticatedRequest).userId) {
+        return reply.status(403).send({ error: 'غير مصرح' });
+      }
+
+      const body = request.body;
+      if (body.visibility && ['public', 'private', 'unlisted'].includes(body.visibility)) {
+        session.visibility = body.visibility;
+        await session.save();
+      }
+
+      return reply.send({ success: true, visibility: session.visibility });
+    }
+  );
+
   // Audio streaming moved to top
 
   // ──────────────────────────────────────────────
@@ -544,7 +567,7 @@ export async function uploadRoutes(fastify: FastifyInstance): Promise<void> {
         .lean();
       
       const unlinkedSessions = await Session.find({ sheikhId: request.userId, lectureId: null, archived: { $ne: true } })
-        .select('title originalFileName fileType status failedAt duration archived createdAt publicKey')
+        .select('title originalFileName fileType status failedAt duration archived createdAt publicKey visibility')
         .sort({ createdAt: -1 })
         .lean();
       
