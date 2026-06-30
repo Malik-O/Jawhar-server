@@ -70,11 +70,11 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
     const userId = await requireAuth(request, reply);
     if (!userId) return;
     const user = await User.findOneAndUpdate(
-      { clerkId: userId, role: 'student', sheikhStatus: { $in: ['none', 'rejected'] } },
-      { $set: { sheikhStatus: 'pending' } },
+      { clerkId: userId, role: 'student' },
+      { $set: { role: 'sheikh', sheikhStatus: 'approved' } },
       { new: true }
     );
-    if (!user) return reply.status(400).send({ error: 'لا يمكن تقديم طلب حالياً' });
-    return reply.send({ success: true, sheikhStatus: 'pending' });
+    if (!user) return reply.status(400).send({ error: 'لا يمكن ترقية الحساب حالياً' });
+    return reply.send({ success: true, sheikhStatus: 'approved', role: 'sheikh' });
   });
 }

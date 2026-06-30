@@ -44,6 +44,11 @@ export async function requireAuthHook(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
+  // Skip authentication for public routes
+  if (request.url.includes('/public/')) {
+    return;
+  }
+  
   const userId = await requireAuth(request, reply);
   if (userId) {
     (request as AuthenticatedRequest).userId = userId;

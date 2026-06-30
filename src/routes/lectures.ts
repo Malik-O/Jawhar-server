@@ -42,7 +42,7 @@ export async function lectureRoutes(fastify: FastifyInstance): Promise<void> {
     const lecture = await Lecture.findById(request.params.id).lean();
     if (!lecture) return reply.status(404).send({ error: 'المحاضرة غير موجودة' });
     const session = await Session.findById(lecture.sessionId)
-      .select('title summary keyPoints transcript quranVerses duration').lean();
+      .select('title summary keyPoints transcript quranVerses duration publicKey words').lean();
     return reply.send({ ...lecture, session });
   });
 
@@ -50,7 +50,7 @@ export async function lectureRoutes(fastify: FastifyInstance): Promise<void> {
     const lecture = await Lecture.findOne({ publicKey: request.params.key }).lean();
     if (!lecture) return reply.status(404).send({ error: 'المحاضرة غير موجودة' });
     const session = await Session.findById(lecture.sessionId)
-      .select('title summary keyPoints transcript quranVerses duration').lean();
+      .select('title summary keyPoints transcript quranVerses duration publicKey words').lean();
     return reply.send({ ...lecture, session });
   });
 

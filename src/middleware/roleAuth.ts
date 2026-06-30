@@ -9,14 +9,21 @@ export async function getUserByClerkId(clerkId: string) {
 
 export async function syncUser(clerkId: string, email: string, name: string, metadata?: any) {
   const isSuperAdmin = clerkId === envConfig.clerkSuperAdminId;
-  const role = isSuperAdmin ? 'super_admin' : 'student';
-  const sheikhStatus = isSuperAdmin ? 'approved' : (metadata?.role === 'sheikh' ? 'pending' : 'none');
+  const role = isSuperAdmin ? 'super_admin' : (metadata?.role === 'sheikh' ? 'sheikh' : 'student');
+  const sheikhStatus = isSuperAdmin ? 'approved' : (metadata?.role === 'sheikh' ? 'approved' : 'none');
 
-  return User.findOneAndUpdate(
-    { clerkId },
-    { $setOnInsert: { clerkId, email, name, role, sheikhStatus } },
-    { upsert: true, new: true }
-  );
+  let user = await User.findOne({ clerkId });
+  if (!user) {
+    user = await User.create({ clerkId, email, name, role, sheikhStatus });
+  } else {
+    const updates: any = { email, name };
+    if (metadata?.role === 'sheikh' && user.role !== 'sheikh') {
+      updates.role = 'sheikh';
+      updates.sheikhStatus = 'approved';
+    }
+    user = await User.findOneAndUpdate({ clerkId }, { $set: updates }, { new: true });
+  }
+  return user;
 }
 
 export async function requireSheikh(
@@ -27,8 +34,8 @@ export async function requireSheikh(
   if (!userId) return false;
 
   const user = await getUserByClerkId(userId);
-  if (!user || user.role !== 'sheikh' || user.sheikhStatus !== 'approved') {
-    reply.status(403).send({ error: 'هذه الميزة مخصصة للشيوخ المعتمدين فقط' });
+  if (!user || user.role !== 'sheikh') {
+    reply.status(403).send({ error: 'هذه الميزة مخصصة للشيوخ فقط' });
     return false;
   }
   (request as AuthenticatedRequest).userId = userId;
