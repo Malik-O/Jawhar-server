@@ -23,12 +23,20 @@ const lectureSchema = new Schema<ILecture>(
   { timestamps: true }
 );
 
-import { customAlphabet } from 'nanoid';
-const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 6);
+import crypto from 'crypto';
+const generateId = (length = 6) => {
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  let result = '';
+  const randomBytes = crypto.randomBytes(length);
+  for (let i = 0; i < length; i++) {
+    result += chars[randomBytes[i] % chars.length];
+  }
+  return result;
+};
 
 lectureSchema.pre('save', function (next) {
   if (this.isNew && !this.publicKey) {
-    this.publicKey = nanoid();
+    this.publicKey = generateId();
   }
   next();
 });
